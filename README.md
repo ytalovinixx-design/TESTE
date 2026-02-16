@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logística REDUC - Transporte Administrativo</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background-color: #f4f7f6; color: #333; }
+        header { background-color: #008542; color: #FFCC00; padding: 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        header h1 { margin: 0; font-size: 1.5rem; }
+        header p { margin: 5px 0 0; color: #fff; font-size: 0.85rem; font-weight: bold; }
+
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        label { display: block; margin-bottom: 6px; font-weight: bold; color: #008542; font-size: 0.85rem; }
+        select { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; margin-bottom: 15px; outline: none; transition: 0.3s; background-color: #fff; }
+        select:focus { border-color: #FFCC00; }
+        
+        .alerta-transito { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 5px solid #ffc107; 
+            font-size: 0.85rem; 
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .btn-buscar { width: 100%; padding: 15px; background-color: #FFCC00; color: #008542; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-buscar:hover { background-color: #e6b800; }
+        .btn-buscar:disabled { background-color: #ccc; cursor: not-allowed; color: #666; }
+
+        .rota-card { margin-top: 25px; border-radius: 10px; border: 1px solid #eee; overflow: hidden; animation: fadeIn 0.5s; }
+        .rota-header { background: #008542; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-maps { background: #4285F4; color: white; padding: 8px 15px; border-radius: 20px; text-decoration: none; font-size: 0.75rem; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        .ponto { padding: 12px 15px; border-bottom: 1px solid #f0f0f0; display: flex; flex-direction: column; }
+        .ponto:last-child { border-bottom: none; background: #e8f5e9; font-weight: bold; border-left: 5px solid #008542; }
+        .horario { color: #d32f2f; font-weight: bold; font-size: 0.85rem; }
+        .endereco { font-size: 0.9rem; color: #444; margin-top: 3px; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body onload="carregarLinhas()">
+
+<header>
+    <h1>Transporte REDUC</h1>
+    <p>LOGÍSTICA DE ROTAS - ADMINISTRATIVO</p>
+</header>
+
+<div class="container">
+    <label>1. Número da Linha:</label>
+    <select id="linha" onchange="carregarGrupos()">
+        <option value="">-- Selecione a Linha --</option>
+    </select>
+
+    <label>2. Itinerário:</label>
+    <select id="grupo" onchange="liberarBotao()" disabled>
+        <option value="">-- Selecione o Itinerário --</option>
+    </select>
+
+    <div class="alerta-transito">
+        <strong>⚠️ ATENÇÃO:</strong> O trajeto sugerido pelo Google Maps pode ser alterado devido às condições de trânsito em tempo real, podendo divergir do itinerário oficial estabelecido pela companhia.
+    </div>
+
+    <button id="btnBuscar" class="btn-buscar" onclick="buscarRota()" disabled>BUSCAR ROTA</button>
+
+    <div id="resultado"></div>
+</div>
+
+<script>
+    const dadosRotas = {};
+
+    function add(linha, grupo, horario, endereco){
+        if(!dadosRotas[linha]) dadosRotas[linha] = {};
+        if(!dadosRotas[linha][grupo]) dadosRotas[linha][grupo] = [];
+        
+        // Regra de chegada na REDUC às 07:30
+        let hFinal = (endereco.toUpperCase().includes("REDUC")) ? "07:30" : horario;
+        dadosRotas[linha][grupo].push({h: hFinal, e: endereco});
+    }
+
+    // --- CARGA DE DADOS (LINHAS A-) ---
+   add("A-50", "UNICO", "05:30", "R. Guarujá, 225 - Cosmos, Rio de Janeiro");
+    add("A-50", "UNICO", "05:38", "R. Framboesa, 32 - Cosmos, Rio de Janeiro");
+    add("A-50", "UNICO", "05:52", "R. Benedito Lacerda, 785 - Campo Grande");
+    add("A-50", "UNICO", "05:58", "José Siqueira Junior - Campo Grande");
+    add("A-50", "UNICO", "06:09", "R. Galeno Chaves, 10 - Campo Grande");
+    add("A-50", "UNICO", "06:15", "Estr. do Mendanha, 1700 - Campo Grande");
+    add("A-50", "UNICO", "06:25", "Estr. do Mendanha, 3006 - Campo Grande");
+    add("A-50", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-52", "UNICO", "05:20", "R. Campo Formoso, 1 - Campo Grande");
+    add("A-52", "UNICO", "05:41", "Estr. da Cachamorra, 488 - Campo Grande");
+    add("A-52", "UNICO", "05:46", "Leão Gondim de Oliveira - Campo Grande");
+    add("A-52", "UNICO", "05:48", "Rua Olinda Ellis, 545 - Campo Grande");
+    add("A-52", "UNICO", "05:52", "R. Ituaçu, 109 - Campo Grande");
+    add("A-52", "UNICO", "05:55", "R. Baicuru, 26 - Campo Grande");
+    add("A-52", "UNICO", "05:58", "Estrada da Caroba, 170 - Campo Grande");
+    add("A-52", "UNICO", "05:59", "Estrada da Caroba, 840 - Campo Grande");
+    add("A-52", "UNICO", "06:00", "Estr. das Capoeiras, 262a - Campo Grande");
+    add("A-52", "UNICO", "06:04", "R. Palmácia, 8 - Campo Grande");
+    add("A-52", "UNICO", "06:05", "Estrada da Posse, 3950 - Campo Grande");
+    add("A-52", "UNICO", "06:07", "Estrada da Posse próx 3160 - Campo Grande");
+    add("A-52", "UNICO", "06:10", "Estrada da Posse próx 2299 - Campo Grande");
+    add("A-52", "UNICO", "06:18", "Estr. dos Sete Riachos, 184 - Santíssimo");
+    add("A-52", "UNICO", "06:23", "R. Catiri, 1321 - Bangu");
+    add("A-52", "UNICO", "06:27", "R. Mal. Marciano, 3202 - Bangu");
+    add("A-52", "UNICO", "06:29", "R. Toulon, 377 - Padre Miguel");
+    add("A-52", "UNICO", "06:34", "R. Mal. Marciano, 161 - Realengo");
+    add("A-52", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-54", "UNICO", "05:34", "Est. do Cabuçu, 2070 - Campo Grande");
+    add("A-54", "UNICO", "05:39", "R. Ofélia Costa, 200 - Campo Grande");
+    add("A-54", "UNICO", "05:40", "Est. do Pré, 1989 - Campo Grande");
+    add("A-54", "UNICO", "05:56", "Av. de Santa Cruz próx 8886 - Senador Camará");
+    add("A-54", "UNICO", "05:59", "Av. de Santa Cruz próx 7474 - Senador Camará");
+    add("A-54", "UNICO", "06:02", "UPA Senador Camará");
+    add("A-54", "UNICO", "06:03", "Rua da Feira próx 1080 - Bangu");
+    add("A-54", "UNICO", "06:06", "R. da Feira, 25 - Bangu");
+    add("A-54", "UNICO", "06:23", "R. Murundu, 1384 - Padre Miguel");
+    add("A-54", "UNICO", "06:25", "Praça Padre Miguel - Realengo");
+    add("A-54", "UNICO", "06:27", "R. Piraquara, 41 - Realengo");
+    add("A-54", "UNICO", "06:35", "Parque Shopping Sulacap");
+    add("A-54", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-55", "UNICO", "06:00", "R. Bulhões de Carvalho, 7 - Centro, Piraí");
+    add("A-55", "UNICO", "06:36", "Rod. Pres. Dutra, 209 - Seropédica");
+    add("A-55", "UNICO", "06:39", "Rod. Pres. Dutra, 1 - São Miguel, Seropédica");
+    add("A-55", "UNICO", "06:43", "RJ-125, 40-42 - São Miguel, Seropédica");
+    add("A-55", "UNICO", "06:50", "Estr. de Paineiras, 77 - Adrianópolis, Nova Iguaçu");
+    add("A-55", "UNICO", "07:02", "Estr. Santa Perciliana, 590 - Nova Iguaçu");
+    add("A-55", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-56", "UNICO", "05:32", "R. Odilon Braga, 24 - Vila das Porteiras, Queimados");
+    add("A-56", "UNICO", "05:45", "Estrada Carlos Sampaio próx 257 - Queimados");
+    add("A-56", "UNICO", "06:05", "Rod. Pres. Dutra, 19401 - Rancho Novo, Nova Iguaçu");
+    add("A-56", "UNICO", "06:09", "R. Cel. Floriano Peixoto Barros, 181 - Nova Iguaçu");
+    add("A-56", "UNICO", "06:10", "Av. Gov. Roberto Silveira, 1070 - Moquetá, NI");
+    add("A-56", "UNICO", "06:13", "Moquetá - Santa Catarina, Nova Iguaçu");
+    add("A-56", "UNICO", "06:23", "Rodovia Presidente Dutra - BNH, Mesquita");
+    add("A-56", "UNICO", "06:24", "R. Coelho da Rocha, 976 - Agostinho Porto, SJM");
+    add("A-56", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-57", "UNICO", "05:50", "R. Com Francisco Baroni, 1052 - Posse, Nova Iguaçu");
+    add("A-57", "UNICO", "05:55", "Estrada Luís Lemos, 974 - Nova Iguaçu");
+    add("A-57", "UNICO", "06:05", "Av. Dr. Arruda Negreiros, 2802 - Nova América, NI");
+    add("A-57", "UNICO", "06:14", "Estr. do Iguaçu, 1720 - Vila Pedro, Nova Iguaçu");
+    add("A-57", "UNICO", "06:21", "R. do Imperador, 466 - Viga, Nova Iguaçu");
+    add("A-57", "UNICO", "06:22", "R. José Cardoso, 5 - Prata, Nova Iguaçu");
+    add("A-57", "UNICO", "06:35", "Av. José Mariano Passos, 1405 - Belford Roxo");
+    add("A-57", "UNICO", "06:39", "RJ - Piam, Belford Roxo");
+    add("A-57", "UNICO", "06:44", "Av. Joaquim da Costa Lima, 2400 - Belford Roxo");
+    add("A-57", "UNICO", "06:47", "Av. Joaquim da Costa Lima - Pq Sao Bernardo");
+    add("A-57", "UNICO", "06:50", "Av. Joaquim da Costa Lima, 30 - Maringá");
+    add("A-57", "UNICO", "07:01", "Av. Joaquim da Costa Lima, 13 - Bairro da Luz");
+    add("A-57", "UNICO", "07:07", "Est. Manoel de Sá, 110 - Boa Ventura");
+    add("A-57", "UNICO", "07:09", "Av. Gov. Leonel Brizola (Pilar) - Duque de Caxias");
+    add("A-57", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-58", "UNICO", "05:40", "R. José Clemente, 400 - Banco de Areia, Mesquita");
+    add("A-58", "UNICO", "05:55", "Estr. Antônio José Bitencourt, 89 - Centro, Nilópolis");
+    add("A-58", "UNICO", "06:00", "R. Ambrósio, 2 - Vila Emil, Mesquita");
+    add("A-58", "UNICO", "06:05", "Av. Getúlio de Moura, 1080 - Centro, Mesquita");
+    add("A-58", "UNICO", "06:09", "Av. Pres. Costa e Silva, 1825 - Centro, Mesquita");
+    add("A-58", "UNICO", "06:10", "Rua Presidente Costa e Silva 571 - Edson Passos");
+    add("A-58", "UNICO", "06:15", "Av. Getúlio Vargas, 2111 - Santos Dumont, Nilópolis");
+    add("A-58", "UNICO", "06:18", "Av. Getúlio Vargas, 1309 - Centro, Nilópolis");
+    add("A-58", "UNICO", "06:21", "Av. Getúlio Vargas, 403 - Olinda, Nilópolis");
+    add("A-58", "UNICO", "06:24", "Estrada do Engenho Novo 116 - Anchieta");
+    add("A-58", "UNICO", "06:26", "Av. Cipriano Barata, 178 - Anchieta");
+    add("A-58", "UNICO", "06:30", "Estr. Mal. Alencastro, 2045 - Ricardo de Albuquerque");
+    add("A-58", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+  add("A-59", "UNICO", "05:55", "Av. Abílio Augusto Távora, 6618 - Nova Iguaçu");
+    add("A-59", "UNICO", "05:57", "Av. Abílio Augusto Távora, 3221 - Nova Iguaçu");
+    add("A-59", "UNICO", "06:03", "Av. Abílio Augusto Távora, 3773 - Nova Iguaçu");
+    add("A-59", "UNICO", "06:04", "R. Maria Teresa, 135 - Centenario, Nova Iguaçu");
+    add("A-59", "UNICO", "06:07", "RJ-105, 1603 - Luz, Nova Iguaçu");
+    add("A-59", "UNICO", "06:10", "RJ-105, 86 - Jardim Alvorada, Nova Iguaçu");
+    add("A-59", "UNICO", "06:13", "Via Light, 51 - Centro, Nova Iguaçu");
+    add("A-59", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-60", "UNICO", "05:40", "Av. das Américas próx 16704 - Recreio");
+    add("A-60", "UNICO", "06:05", "Av. das Américas, 20600 - Vargem Grande");
+    add("A-60", "UNICO", "06:06", "R. Wilfred Penha Borges, 422 - Recreio");
+    add("A-60", "UNICO", "06:07", "Condomínio Maramar - Recreio");
+    add("A-60", "UNICO", "06:09", "Av. das Américas, 89 - Recreio");
+    add("A-60", "UNICO", "06:17", "Estrada Do Pontal próx 415 - Recreio");
+    add("A-60", "UNICO", "06:20", "R. José Américo de Almeida, 774 - Recreio");
+    add("A-60", "UNICO", "06:21", "Professor Motta Maia - Recreio");
+    add("A-60", "UNICO", "06:22", "R. Fernando Leite Mendes, 28 - Recreio");
+    add("A-60", "UNICO", "06:24", "Av. Genaro de Carvalho, 791 - Recreio");
+    add("A-60", "UNICO", "06:26", "Barra World - Recreio");
+    add("A-60", "UNICO", "06:30", "Av. das Américas, 11599 - Barra da Tijuca");
+    add("A-60", "UNICO", "06:37", "Av. das Américas próx 10501 - Barra da Tijuca");
+    add("A-60", "UNICO", "06:44", "Av. das Américas, 6303 - Barra da Tijuca");
+    add("A-60", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-61", "UNICO", "05:55", "Av. Monsenhor Ascâneo, 609 - Barra da Tijuca");
+    add("A-61", "UNICO", "06:00", "Av Lúcio Costa 3540 (Posto 5) - Barra da Tijuca");
+    add("A-61", "UNICO", "06:04", "Av. Pref. Dulcídio Cardoso, 5000 - Barra da Tijuca");
+    add("A-61", "UNICO", "06:10", "Av. das Américas, 630 - Barra da Tijuca");
+    add("A-61", "UNICO", "06:23", "Av. Embaixador Abelardo Bueno, 1930 - Barra");
+    add("A-61", "UNICO", "06:24", "Rio 2 - Barra da Tijuca");
+    add("A-61", "UNICO", "06:40", "Minha Praia - Barra Olímpica");
+    add("A-61", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-62", "UNICO", "06:00", "R. Visc. de Pirajá, 111 - Ipanema");
+    add("A-62", "UNICO", "06:15", "Av. Nossa Sra. de Copacabana, 1221 - Copacabana");
+    add("A-62", "UNICO", "06:25", "Av. N. Sra. de Copacabana próx 637 - Copacabana");
+    add("A-62", "UNICO", "06:30", "Av. N. Sra. de Copacabana próx 252 - Copacabana");
+    add("A-62", "UNICO", "06:35", "Avenida Lauro Sodré, 445 - Botafogo");
+    add("A-62", "UNICO", "06:40", "Praia de Botafogo próx 2957 - Botafogo");
+    add("A-62", "UNICO", "06:45", "R. Sen. Vergueiro, 136 - Flamengo");
+    add("A-62", "UNICO", "06:50", "Praia do Flamengo próx 132 - Flamengo");
+    add("A-62", "UNICO", "06:55", "Av. Beira Mar, 4700 - Centro");
+    add("A-62", "UNICO", "07:00", "Av. Beira Mar, 2139 - Centro");
+    add("A-62", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-63", "UNICO", "06:25", "R. Muniz Barreto, 805 - Botafogo");
+    add("A-63", "UNICO", "06:26", "R. São Clemente, 223 - Botafogo");
+    add("A-63", "UNICO", "06:27", "Sorocaba - Botafogo");
+    add("A-63", "UNICO", "06:28", "R. São Clemente, 321 - Botafogo");
+    add("A-63", "UNICO", "06:29", "R. São Clemente, 373 - Botafogo");
+    add("A-63", "UNICO", "06:31", "Rua Humaitá próx 68 - Humaitá");
+    add("A-63", "UNICO", "06:34", "Rua Humaitá próx 234 - Humaitá");
+    add("A-63", "UNICO", "06:45", "R. Sebastião de Lacerda, 4 - Laranjeiras");
+    add("A-63", "UNICO", "06:50", "R. das Laranjeiras, 133 - Laranjeiras");
+    add("A-63", "UNICO", "06:53", "R. Eleone de Almeida, 22 - Catumbi");
+    add("A-63", "UNICO", "06:56", "Av. Henrique Valadares, 107 - Centro");
+    add("A-63", "UNICO", "07:03", "R. Geógrafo Milton Santos, 300 - Santo Cristo");
+    add("A-63", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-64", "UNICO", "06:18", "Rua Conde de Bonfim próx 1062 - Tijuca");
+    add("A-64", "UNICO", "06:26", "R. Mário de Alencar, 23 - Tijuca");
+    add("A-64", "UNICO", "06:27", "R. Pinto Guedes, 13 - Tijuca");
+    add("A-64", "UNICO", "06:29", "R. João da Mata, 12 - Tijuca");
+    add("A-64", "UNICO", "06:30", "R. Barão de Mesquita, 265 - Tijuca");
+    add("A-64", "UNICO", "06:32", "R. Des. Izidro, 29b - Tijuca");
+    add("A-64", "UNICO", "06:39", "Rua Conde de Bonfim, 187 - Tijuca");
+    add("A-64", "UNICO", "06:42", "Rua Conde de Bonfim próx 28 - Tijuca");
+    add("A-64", "UNICO", "06:45", "R. Haddock Lobo, 323 - Tijuca");
+    add("A-64", "UNICO", "06:48", "R. Haddock Lobo, 196 - Tijuca");
+    add("A-64", "UNICO", "06:52", "Av. Paulo de Frontin, 217 - Praça da Bandeira");
+    add("A-64", "UNICO", "07:00", "R. Monsenhor Manuel Gomes, 4 - São Cristóvão");
+    add("A-64", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-65", "UNICO", "06:00", "R. Oito de Dezembro, 634 - Vila Isabel");
+    add("A-65", "UNICO", "06:07", "Boulevard 28 de Setembro, 262 - Vila Isabel");
+    add("A-65", "UNICO", "06:09", "Boulevard 28 de Setembro, 398 - Vila Isabel");
+    add("A-65", "UNICO", "06:15", "Ponto Final: Vila Isabel");
+    add("A-65", "UNICO", "06:19", "R. Uberaba, 71 - Grajau");
+    add("A-65", "UNICO", "06:21", "R. Paula Brito, 240 - Andaraí");
+    add("A-65", "UNICO", "06:24", "Rua Maxwell próx 355 - Andaraí");
+    add("A-65", "UNICO", "06:28", "R. Maxwell, 59 - Vila Isabel");
+    add("A-65", "UNICO", "06:30", "R. São Francisco Xavier, 376 - Maracanã");
+    add("A-65", "UNICO", "06:37", "Praça Gen. Portinho, 26 - Maracanã");
+    add("A-65", "UNICO", "06:43", "R. José Eugênio, 37 - São Cristóvão");
+    add("A-65", "UNICO", "06:45", "Av. Rotary Internacional, 55 - São Cristóvão");
+    add("A-65", "UNICO", "06:52", "Rua São Luiz Gonzaga, 716 - São Cristóvão");
+    add("A-65", "UNICO", "06:57", "R. Pref. Olímpio de Melo, 1495 - Benfica");
+    add("A-65", "UNICO", "07:00", "Av. Brasil, 881 - Maré");
+    add("A-65", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-66", "UNICO", "06:00", "Praça do Bandolim, 90 - Curicica");
+    add("A-66", "UNICO", "06:04", "Estr. dos Bandeirantes, 5450 - Jacarepaguá");
+    add("A-66", "UNICO", "06:07", "Estr. dos Bandeirantes, 7300 - Jacarepaguá");
+    add("A-66", "UNICO", "06:10", "Pedro Calmon - Jacarepaguá");
+    add("A-66", "UNICO", "06:12", "Av. Olof Palme, 605 - Barra Olímpica");
+    add("A-66", "UNICO", "06:13", "Av. Olof Palme, 76 - Barra Olímpica");
+    add("A-66", "UNICO", "06:17", "Parque Olímpico - Barra Olímpica");
+    add("A-66", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-69", "UNICO", "06:05", "R. Comendador Bastos, 156 - Freguesia (Ilha)");
+    add("A-69", "UNICO", "06:10", "Av. Paranapuã, 35 - Freguesia (Ilha)");
+    add("A-69", "UNICO", "06:20", "R. Formosa do Zumbí, 195 - Zumbi");
+    add("A-69", "UNICO", "06:35", "R. Vistula, 82 - Jardim Carioca");
+    add("A-69", "UNICO", "06:41", "R. Gen. Estilac Leal, 96 - Jardim Guanabara");
+    add("A-69", "UNICO", "06:45", "Francisco Alves - Jardim Guanabara");
+    add("A-69", "UNICO", "06:49", "Rua Cambaúba, 1050 - Jardim Guanabara");
+    add("A-69", "UNICO", "06:53", "Rua Cambaúba, 385 - Jardim Guanabara");
+    add("A-69", "UNICO", "06:57", "Rua Haroldo Lôbo, 77 - Portuguesa");
+    add("A-69", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-70", "UNICO", "05:45", "Estr. Rodrigues Caldas, 1384 - Taquara");
+    add("A-70", "UNICO", "05:50", "Estr. do Outeiro Santo, 1161 - Taquara");
+    add("A-70", "UNICO", "05:57", "Largo da Capela - Taquara");
+    add("A-70", "UNICO", "06:05", "Condomínio Rio Grande - Jacarepaguá");
+    add("A-70", "UNICO", "06:06", "Av. dos Mananciais, 1431 - Taquara");
+    add("A-70", "UNICO", "06:08", "Av. dos Mananciais, 401 - Taquara");
+    add("A-70", "UNICO", "06:19", "Avenida Albérico Diniz - Jardim Sulacap");
+    add("A-70", "UNICO", "06:20", "Porto Santana - Vila Valqueire");
+    add("A-70", "UNICO", "06:23", "Avenida Jambeiro próx 474 - Vila Valqueire");
+    add("A-70", "UNICO", "06:26", "João Monteiro - Mal. Hermes");
+    add("A-70", "UNICO", "06:32", "Rua Joao Vicente 1755 - Deodoro");
+    add("A-70", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-71", "UNICO", "06:10", "Av. Ten-Cel. Muniz de Aragão, 1065 - Anil");
+    add("A-71", "UNICO", "06:15", "Otávio Malta - Anil");
+    add("A-71", "UNICO", "06:22", "Estr. de Jacarepaguá, 4710 - Anil");
+    add("A-71", "UNICO", "06:30", "R. Oscár Lopes, 27 - Anil");
+    add("A-71", "UNICO", "06:30", "Antônio Cordeiro - Anil");
+    add("A-71", "UNICO", "06:31", "Tirol - Freguesia (Jacarepaguá)");
+    add("A-71", "UNICO", "06:34", "Estrada dos Três Rios próx 1049 - Freguesia");
+    add("A-71", "UNICO", "06:36", "Estr. dos Três Rios, 708 - Freguesia");
+    add("A-71", "UNICO", "06:37", "Estrada dos Três Rios próx 329 - Freguesia");
+    add("A-71", "UNICO", "06:42", "Av. Geremário Dantas próx 1245 - Freguesia");
+    add("A-71", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-72", "UNICO", "06:17", "Praça Seca - Praça Seca");
+    add("A-72", "UNICO", "06:22", "R. Cândido Benício, 643 - Campinho");
+    add("A-72", "UNICO", "06:25", "R. Padre Manso, 81 - Madureira");
+    add("A-72", "UNICO", "06:29", "Rua Capitão Couto Menezes próx 288 - Madureira");
+    add("A-72", "UNICO", "06:31", "Estrada Intendente Magalhães, 650");
+    add("A-72", "UNICO", "06:33", "R. Apodi, 83 - Bento Ribeiro");
+    add("A-72", "UNICO", "06:40", "R. Alcídes Maia, 36 - Bento Ribeiro");
+    add("A-72", "UNICO", "06:48", "Rua Luís Coutinho Cavalcanti, 352 - Guadalupe");
+    add("A-72", "UNICO", "06:50", "Recreio do Pontal - Guadalupe");
+    add("A-72", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-73", "UNICO", "06:00", "Av. Ernani Cardoso, 157 - Cascadura");
+    add("A-73", "UNICO", "06:05", "Rua Clarimundo de Melo, 481 - Piedade");
+    add("A-73", "UNICO", "06:13", "R. Dois de Fevereiro, 875 - Encantado");
+    add("A-73", "UNICO", "06:17", "Rua Dias da Cruz próx 572 - Méier");
+    add("A-73", "UNICO", "06:20", "R. Dias da Cruz, 414 - Méier");
+    add("A-73", "UNICO", "06:22", "Rua Dias da Cruz próx 160 - Méier");
+    add("A-73", "UNICO", "06:26", "R. Silva Rabêlo, 53 - Méier");
+    add("A-73", "UNICO", "06:30", "R. Castro Alves, 138 - Méier");
+    add("A-73", "UNICO", "06:33", "R. Getúlio, 173 - Todos os Santos");
+    add("A-73", "UNICO", "06:34", "R. Getúlio, 244 - Todos os Santos");
+    add("A-73", "UNICO", "06:35", "R. Cirne Maia, 124 - Cachambi");
+    add("A-73", "UNICO", "06:37", "R. Piauí, 128 - Todos os Santos");
+    add("A-73", "UNICO", "06:40", "Rua Piauí próx 222 - Todos os Santos");
+    add("A-73", "UNICO", "06:42", "Av. Dom Hélder Câmara, 5820 - Cachambi");
+    add("A-73", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-74", "UNICO", "06:10", "R. Itamarati, 398 - Cascadura");
+    add("A-74", "UNICO", "06:32", "Av. Dom Hélder Câmara, 9319 - Quintino");
+    add("A-74", "UNICO", "06:33", "Av. Dom Hélder Câmara, 8569 - Piedade");
+    add("A-74", "UNICO", "06:41", "José dos Reis - Engenho de Dentro");
+    add("A-74", "UNICO", "06:42", "Av. Dom Hélder Câmara, 5771 - Pilares");
+    add("A-74", "UNICO", "06:43", "Av. Dom Hélder Câmara, 5539 - Todos os Santos");
+    add("A-74", "UNICO", "06:44", "R. Pedras Altas, 101 - Cachambi");
+    add("A-74", "UNICO", "06:48", "Av. Dom Hélder Câmara, 5067 - Cachambi");
+    add("A-74", "UNICO", "06:51", "R. Degas, 113 - Del Castilho");
+    add("A-74", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-75", "UNICO", "06:25", "R. Cabuçu, 14 - Lins de Vasconcelos");
+    add("A-75", "UNICO", "06:28", "R. Gen. Belegarde, 94 - Engenho Novo");
+    add("A-75", "UNICO", "06:30", "Av. Mal. Rondon, 2944 - Engenho Novo");
+    add("A-75", "UNICO", "06:32", "R. Mal. Bittencourt, 78 - Riachuelo");
+    add("A-75", "UNICO", "06:45", "R. Ferreira de Andrade, 369 - Cachambi");
+    add("A-75", "UNICO", "06:47", "R. Ferreira de Andrade, 909 - Cachambi");
+    add("A-75", "UNICO", "06:52", "Av. Dom Hélder Câmara, 3335 - Del Castilho");
+    add("A-75", "UNICO", "06:55", "Estrada Adhemar Bebiano, 59 - Del Castilho");
+    add("A-75", "UNICO", "06:57", "Estrada Velha Da Pavuna próx 550");
+    add("A-75", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-76", "UNICO", "06:20", "Aitinga - Inhaúma");
+    add("A-76", "UNICO", "06:27", "Para de Minas - Engenho da Rainha");
+    add("A-76", "UNICO", "06:34", "R. Angai, 2 - Vila Kosmos");
+    add("A-76", "UNICO", "06:36", "Av. Automóvel Clube próx 6358 - Vicente de Carvalho");
+    add("A-76", "UNICO", "06:42", "Av. Vicente de Carvalho, 279 - Vicente de Carvalho");
+    add("A-76", "UNICO", "06:47", "Av. Monsenhor Félix, 194 - Irajá");
+    add("A-76", "UNICO", "06:50", "Av. Monsenhor Félix, 634 - Irajá");
+    add("A-76", "UNICO", "06:52", "R. Gustavo de Andrade, 290 - Irajá");
+    add("A-76", "UNICO", "06:56", "Estrada Da Agua Grande, 520 - Irajá");
+    add("A-76", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-77", "UNICO", "06:18", "Estr. João Paulo, 902 - Barros Filho");
+    add("A-77", "UNICO", "06:28", "Estr. do Sapê, 21 - Rocha Miranda");
+    add("A-77", "UNICO", "06:30", "Estr. do Sapê, 774 - Turiaçú");
+    add("A-77", "UNICO", "06:39", "Av. dos Italianos, 733 - Rocha Miranda");
+    add("A-77", "UNICO", "06:46", "R. Ururaí, 963 - Honório Gurgel");
+    add("A-77", "UNICO", "06:47", "Av. dos Italianos, 1120 - Rocha Miranda");
+    add("A-77", "UNICO", "07:00", "Av. Pastor Martin Luther King Junior, 8779 - Colégio");
+    add("A-77", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-78", "UNICO", "06:22", "Rua Lino Teixeira, 171 - Riachuelo");
+    add("A-78", "UNICO", "06:39", "R. Francisco Medeiros, 17 - Higienópolis");
+    add("A-78", "UNICO", "06:47", "Rua Dona Isabel, 158 - Bonsucesso");
+    add("A-78", "UNICO", "06:51", "Avenida Teixeira de Castro próx 32 - Bonsucesso");
+    add("A-78", "UNICO", "06:58", "R. Quito, 133 - Penha");
+    add("A-78", "UNICO", "07:00", "Rua Quito próx 250 - Penha");
+    add("A-78", "UNICO", "07:03", "R. Apiaí, 66 - Penha");
+    add("A-78", "UNICO", "07:07", "Rua Enes Filho, 466 - Penha Circular");
+    add("A-78", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-79", "UNICO", "06:36", "Av. Vicente de Carvalho, 1325 - Penha Circular");
+    add("A-79", "UNICO", "06:40", "R. Antônio Braune, 19 - Vila da Penha");
+    add("A-79", "UNICO", "06:42", "Avenida Meriti próx 1176 - Vila da Penha");
+    add("A-79", "UNICO", "06:46", "Avenida Meriti próx 1650 - Vila da Penha");
+    add("A-79", "UNICO", "06:47", "Avenida Meriti próx 1852 - Vila da Penha");
+    add("A-79", "UNICO", "06:49", "Av. Brás de Pina, 1691 - Brás de Pina");
+    add("A-79", "UNICO", "06:50", "Av. Brás de Pina, 1868 - Brás de Pina");
+    add("A-79", "UNICO", "06:53", "Av. Meriti, 3162 - Cordovil");
+    add("A-79", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-80", "UNICO", "05:10", "Estrada terê fri - Km 6 - Albuquerque, Teresópolis");
+    add("A-80", "UNICO", "05:25", "R. Mariana, 45 - Bom Retiro, Teresópolis");
+    add("A-80", "UNICO", "05:56", "R. Ieda Tijuca, 728 - Tijuca, Teresópolis");
+    add("A-80", "UNICO", "06:03", "R. Júlio Rosa, 334 - Tijuca, Teresópolis");
+    add("A-80", "UNICO", "06:05", "R. Pref. Sebastião Teixeira, 380 - Várzea, Teresópolis");
+    add("A-80", "UNICO", "06:14", "Av. Feliciano Sodré, 702 - Agriões, Teresópolis");
+    add("A-80", "UNICO", "06:15", "Av. Alberto Tôrres, 1233 - Alto, Teresópolis");
+    add("A-80", "UNICO", "06:16", "R. Cel. Silvio Lisboa da Cunha, 591 - Teresópolis");
+    add("A-80", "UNICO", "06:17", "Av. Oliveira Botelho, 88 - Alto, Teresópolis");
+    add("A-80", "UNICO", "06:20", "Av. Oliveira Botelho, 825 - Alto, Teresópolis");
+    add("A-80", "UNICO", "06:47", "Estr. da Cascata, 22 - Guapimirim");
+    add("A-80", "UNICO", "06:49", "Rod. Rio-Teresópolis Lat 5490 - Guapimirim");
+    add("A-80", "UNICO", "07:14", "Rod. Br 116, 1158 - Leque Azul, Magé");
+    add("A-80", "UNICO", "07:16", "R. Biguaçu, 10 - Rio Imbariê");
+    add("A-80", "UNICO", "07:17", "R. Solimões, 1 - Santo Antonio da Serra");
+    add("A-80", "UNICO", "07:30", "Av. Catorze, 393 - Vila Actura");
+
+    add("A-81", "UNICO", "05:55", "Rod. JK, 8501 - Cascata do Imbuí, Petrópolis");
+    add("A-81", "UNICO", "05:57", "Rod. JK, 7299 - Cascata do Imbuí, Petrópolis");
+    add("A-81", "UNICO", "06:02", "Estr. União e Indústria, 2800 - Petrópolis");
+    add("A-81", "UNICO", "06:13", "R. Dr. Hermogênio Silva, 40a - Retiro, Petrópolis");
+    add("A-81", "UNICO", "06:22", "Av. Piabanha, 732 - Centro, Petrópolis");
+    add("A-81", "UNICO", "06:28", "R. Mosela, 1628 - Mosela, Petrópolis");
+    add("A-81", "UNICO", "06:35", "R. Mosela, 266 - Mosela, Petrópolis");
+    add("A-81", "UNICO", "06:38", "R. Bingen, 870 - Bingen, Petrópolis");
+    add("A-81", "UNICO", "06:40", "R. Bingen, 1950 - Bingen, Petrópolis");
+    add("A-81", "UNICO", "06:42", "Rua Doutor Paulo Hervé, 82 - Bingen");
+    add("A-81", "UNICO", "06:44", "Rua Doutor Paulo Hervé, 878 - Capela");
+    add("A-81", "UNICO", "06:46", "R. Min. Lúcio Meira, 1424 - Bingen");
+    add("A-81", "UNICO", "06:48", "Rod. Washington Luiz, 8 - Bingen");
+    add("A-81", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-82", "UNICO", "05:50", "R. Quissamã, 882 - Quissamã, Petrópolis");
+    add("A-82", "UNICO", "05:53", "Av. Ipiranga, 667 - Centro, Petrópolis");
+    add("A-82", "UNICO", "06:12", "R. Paulo Barbosa, 105 - Centro, Petrópolis");
+    add("A-82", "UNICO", "06:14", "Rua do Imperador, 982 - Centro, Petrópolis");
+    add("A-82", "UNICO", "06:15", "R. Áureliano Coutinho, 162 - Centro, Petrópolis");
+    add("A-82", "UNICO", "06:22", "R. Saldanha Marinho, 568 - Castelânea, Petrópolis");
+    add("A-82", "UNICO", "06:26", "R. Gonçalves Dias, 670 - Valparaíso, Petrópolis");
+    add("A-82", "UNICO", "06:29", "R. Washington Luiz, 821 - Valparaíso, Petrópolis");
+    add("A-82", "UNICO", "06:31", "R. João Macedo, 151 - Cel. Veiga, Petrópolis");
+    add("A-82", "UNICO", "06:33", "R. Cel. Veiga, 1988 - Valparaíso, Petrópolis");
+    add("A-82", "UNICO", "06:35", "R. Gen. Rondon, 580 - Valparaíso, Petrópolis");
+    add("A-82", "UNICO", "06:37", "R. Gen. Rondon, 1004 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:38", "R. Gen. Rondon, 1300 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:41", "Av. Joaquim Rolla, 131 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:42", "Av. Getulio Vargas, 1184 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:43", "R. Miracema, 651 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:44", "R. São Salvador, 380 - Quitandinha, Petrópolis");
+    add("A-82", "UNICO", "06:50", "R. República Dominicana, 628 - Quitandinha");
+    add("A-82", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-83", "UNICO", "05:45", "Av. Central Ewerton Xavier, 3345 - Serra Grande");
+    add("A-83", "UNICO", "05:50", "Av. Central Ewerton Xavier, 81 - Maravista");
+    add("A-83", "UNICO", "06:02", "Estrada Francisco da Cruz Nunes, 1935 - Itaipu");
+    add("A-83", "UNICO", "06:10", "Av. Dr. Acúrcio Tôrres, s/n - Piratininga");
+    add("A-83", "UNICO", "06:10", "Av. Dr. Raul de Oliveira Rodrigues, 10 - Cafubá");
+    add("A-83", "UNICO", "06:21", "Avenida Quintino Bocaiúva, 951 - Charitas");
+    add("A-83", "UNICO", "06:23", "Rua Francisco Dutra, 51 - Icaraí");
+    add("A-83", "UNICO", "06:25", "Av. Roberto Silveira, 355 - Icaraí");
+    add("A-83", "UNICO", "06:29", "Av. Roberto Silveira, 174 - Icaraí");
+    add("A-83", "UNICO", "06:32", "Rua Miguel de Frias, 59 - Icaraí");
+    add("A-83", "UNICO", "06:36", "R. Dr. Paulo Alves, 137 - Ingá");
+    add("A-83", "UNICO", "06:40", "Av. Badger da Silveira, 103 - Centro, Niterói");
+    add("A-83", "UNICO", "06:45", "Avenida Visconde do Rio Branco 403 - Centro");
+    add("A-83", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-84", "UNICO", "05:30", "R. Adelaide Lima, 6 - Jardim Catarina");
+    add("A-84", "UNICO", "05:36", "Av. Domingos Damasceno Duarte, 426 - Trindade");
+    add("A-84", "UNICO", "05:41", "Rua Laureno Rosa 172 - Alcântara");
+    add("A-84", "UNICO", "05:45", "Estr. dos Menezes, 812 - Alcantara");
+    add("A-84", "UNICO", "05:53", "R. Dr. Alfredo Backer, 18 - Trindade");
+    add("A-84", "UNICO", "06:06", "R. Hugolino Pereira dos Santos, 5 - Santa Catarina");
+    add("A-84", "UNICO", "06:10", "Av. Lúcio Tomé Feteira, 151 - Vila Lage");
+    add("A-84", "UNICO", "06:15", "Rua Oliveira Botelho - Neves, São Gonçalo");
+    add("A-84", "UNICO", "06:32", "Rua Doutor Luiz Palmier 1001 - Barreto, Niterói");
+    add("A-84", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-85", "UNICO", "05:45", "Av. Dr. Eugênio Borges, 2551 - Arsenal");
+    add("A-85", "UNICO", "05:50", "Avenida Eugenio Borges 1684 - Arsenal");
+    add("A-85", "UNICO", "05:55", "RJ - Tribobó, São Gonçalo");
+    add("A-85", "UNICO", "06:05", "Rod. Prefeito João Sampaio próx 1776 - Maria Paula");
+    add("A-85", "UNICO", "06:06", "Estr. Caetano Monteiro próx 2662 - Maria Paula");
+    add("A-85", "UNICO", "06:15", "Estr. Caetano Monteiro próx 4979 - Pendotiba");
+    add("A-85", "UNICO", "06:24", "R. Dr. Mario Vianna, 506 - Santa Rosa");
+    add("A-85", "UNICO", "06:25", "R. Dr. Mario Vianna, 303 - Santa Rosa");
+    add("A-85", "UNICO", "06:26", "R. Santa Rosa, 192 - Santa Rosa");
+    add("A-85", "UNICO", "06:27", "R. Santa Rosa, 109 - Santa Rosa");
+    add("A-85", "UNICO", "06:30", "R. Noronha Torrezão, 102f - Santa Rosa");
+    add("A-85", "UNICO", "06:38", "Alameda São Boaventura, 449 - Fonseca");
+    add("A-85", "UNICO", "06:40", "Alameda São Boaventura próx 263 - Fonseca");
+    add("A-85", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-87", "UNICO", "06:00", "R. Principal, 279 - Cachoeira Grande, Magé");
+    add("A-87", "UNICO", "06:10", "R. João Vicêncio, 263 - Centro, Magé");
+    add("A-87", "UNICO", "06:39", "Av. Marta Vidal, 15 - Fragoso, Magé");
+    add("A-87", "UNICO", "06:40", "Av. Automóvel Clube, 1353 - Fragoso, Magé");
+    add("A-87", "UNICO", "06:43", "Av. Automóvel Clube, km 57 - Parada Angélica");
+    add("A-87", "UNICO", "06:45", "Av. Automóvel Clube, 7736 - Jardim Imbarie");
+    add("A-87", "UNICO", "06:58", "Av. Automóvel Clube, 6428 - Taquara");
+    add("A-87", "UNICO", "07:05", "Av. Automóvel Clube, 1185 - Jardim Barro Branco");
+    add("A-87", "UNICO", "07:10", "Rua da Matriz, 186 - Santa Cruz da Serra");
+    add("A-87", "UNICO", "07:18", "R. Angustura, 8a - Santa Cruz da Serra");
+    add("A-87", "UNICO", "07:19", "Rod. Washington Luíz, 16641 - Santo Antônio");
+    add("A-87", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-88", "UNICO", "06:10", "Avenida Pernambucana próx 2902 - Coelho da Rocha");
+    add("A-88", "UNICO", "06:14", "Av. Presidente Lincoln, 307 - Jardim Meriti");
+    add("A-88", "UNICO", "06:18", "Av. Comendador Teles, 229 - Vilar dos Teles");
+    add("A-88", "UNICO", "06:25", "Av. Fagundes Varela, 26 - Vilar dos Teles");
+    add("A-88", "UNICO", "06:29", "R. José Carlos Viêira, 852 - Jardim Paraiso");
+    add("A-88", "UNICO", "06:39", "Rua Pedro Lessa próx 1530 - Jardim Olavo Bilac");
+    add("A-88", "UNICO", "06:43", "R. Pedro Lessa, 70 - Vila Leopoldina");
+    add("A-88", "UNICO", "06:48", "Av. Pres. Kennedy, 3334 - Gramacho");
+    add("A-88", "UNICO", "06:50", "Rua José Freire de Lima, 109 - Periquitos");
+    add("A-88", "UNICO", "06:55", "Avenida Presidente Tancredo Neves próx 788");
+    add("A-88", "UNICO", "07:06", "R. Prudente de Moraes, 976 - Itatiaia");
+    add("A-88", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-89", "UNICO", "06:25", "Av. Dr. Manoel Teles, 1714b - Centro, Caxias");
+    add("A-89", "UNICO", "06:27", "R. Campos, 26 - Bar Cavalheiros");
+    add("A-89", "UNICO", "06:30", "R. Campos, 580 - Parque Lafaiete");
+    add("A-89", "UNICO", "06:35", "Av. Nilo Peçanha, 2006 - Centro, Caxias");
+    add("A-89", "UNICO", "06:43", "Av. Nilo Peçanha, 1335 - Parque Lafaiete");
+    add("A-89", "UNICO", "06:53", "R. Itaciba, 768a - Itatiaia");
+    add("A-89", "UNICO", "07:00", "Av. Raul Soares, 63 - Parque Duque");
+    add("A-89", "UNICO", "07:02", "Av. Brg. Lima e Silva, 1066 - 25 de Agosto");
+    add("A-89", "UNICO", "07:04", "R. Marechal Bento Manoel, 05 - 25 de Agosto");
+    add("A-89", "UNICO", "07:12", "Rodovia Washington Luiz, 1264 - Parque Sarapuí");
+    add("A-89", "UNICO", "07:15", "Rod. Washington Luiz, 5049 - Parque Beira Mar");
+    add("A-89", "UNICO", "07:20", "REDUC - Duque de Caxias");
+
+    add("A-92", "UNICO", "05:00", "Av. Cesário de Melo, 10967 - Paciência");
+    add("A-92", "UNICO", "05:05", "Av. Cesário de Melo, 12586 - Santa Cruz");
+    add("A-92", "UNICO", "05:33", "Estr. de Sepetiba, 2121 - Santa Cruz");
+    add("A-92", "UNICO", "05:35", "Av. Areia Branca, 15 - Santa Cruz");
+    add("A-92", "UNICO", "05:38", "Av. Areia Branca, 41 - Santa Cruz");
+    add("A-92", "UNICO", "05:40", "Praça Morada do Império - Santa Cruz");
+    add("A-92", "UNICO", "05:50", "Av. Padre Guilherme Decaminada, 2004 - Santa Cruz");
+    add("A-92", "UNICO", "06:04", "Av. Brasil, 50851 - Campo Grande");
+    add("A-92", "UNICO", "06:15", "Rod. Governador Mário Covas, 13 - Campo Grande");
+    add("A-92", "UNICO", "06:16", "Estrada Br 101 - Campo Grande");
+    add("A-92", "UNICO", "06:17", "Rod. Gov. Mário Covas Próx 39967 - Bangu");
+    add("A-92", "UNICO", "06:20", "Av. Brasil, 6 - Realengo");
+    add("A-92", "UNICO", "07:10", "REDUC - Duque de Caxias");
+
+    add("A-95", "UNICO", "06:00", "Brt Transcarioca - Merck - Taquara");
+    add("A-95", "UNICO", "06:08", "Estr. dos Bandeirantes, 543 - Taquara");
+    add("A-95", "UNICO", "06:10", "Estr. do Tindiba, 2082 - Taquara");
+    add("A-95", "UNICO", "06:12", "Estr. do Tindiba, 1282 - Taquara");
+    add("A-95", "UNICO", "06:13", "Estr. do Tindiba, 472 - Taquara");
+    add("A-95", "UNICO", "06:19", "R. Retiro dos Artistas, 935 - Pechincha");
+    add("A-95", "UNICO", "06:25", "Estr. do Pau-Ferro, 17 - Pechincha");
+    add("A-95", "UNICO", "06:30", "Estr. do Pau-Ferro, 252 - Pechincha");
+    add("A-95", "UNICO", "07:30", "REDUC - Duque de Caxias");
+
+    add("A-97", "UNICO", "06:25", "Av. Chrisóstomo Pimentel de Oliveira, 1518 - Anchieta");
+    add("A-97", "UNICO", "06:30", "Professor Bernardino Rocha - Pavuna");
+    add("A-97", "UNICO", "06:35", "R. Comendador Guerra, 505 - Pavuna");
+    add("A-97", "UNICO", "06:42", "R. Min. Artur Costa, 911 - Jardim América");
+    add("A-97", "UNICO", "06:44", "R. Min. Artur Costa, 475 - Jardim América");
+    add("A-97", "UNICO", "06:47", "Rua Marechal Antônio Sousa, 655 - Jardim América");
+    add("A-97", "UNICO", "07:00", "Av. Gov. Leonel Brizola próx 3370 - Vila Leopoldina");
+    add("A-97", "UNICO", "07:07", "Av. Gov. Leonel Brizola, 5849 - Gramacho");
+    add("A-97", "UNICO", "07:25", "REDUC - Duque de Caxias");
+
+    add("A-98", "UNICO", "06:15", "Av. Venância, 604 - Xerém");
+    add("A-98", "UNICO", "06:35", "R. Dr. Sabino Árias, 23 - Mantiquira");
+    add("A-98", "UNICO", "06:36", "R. Cordovil Gomes de Souza, 15 - Vila Santa Alice");
+    add("A-98", "UNICO", "06:45", "Rodovia Washington Luis s/n - Santo Antônio");
+    add("A-98", "UNICO", "06:48", "Rod. Washington Luiz, 18208 - Santa Cruz da Serra");
+    add("A-98", "UNICO", "06:50", "Rod. Washington Luíz Próx 18276 - Santa Cruz da Serra");
+    add("A-98", "UNICO", "07:00", "Av. Primavera, 36 - Jardim Primavera");
+    add("A-98", "UNICO", "07:03", "Av. Jardins Primavera Lote 07 - Praça do Gelo");
+    add("A-98", "UNICO", "07:05", "Passagem Sobre a Linha Férrea, 498 - Pq Uruguaiana");
+    add("A-98", "UNICO", "07:10", "R. Agostinho de Oliveira, 1059 - Jardim Primavera");
+    add("A-98", "UNICO", "07:13", "Av. São Paulo, 341-345 - Parque Marilandia");
+    add("A-98", "UNICO", "07:15", "Avenida São Paulo Próx 35 - Parque Império");
+    add("A-98", "UNICO", "07:30", "REDUC - Duque de Caxias");
+    function carregarLinhas() {
+        const sLinha = document.getElementById("linha");
+        Object.keys(dadosRotas).sort().forEach(rota => {
+            sLinha.add(new Option(rota, rota));
+        });
+    }
+
+    function carregarGrupos() {
+        const linha = document.getElementById("linha").value;
+        const sGrupo = document.getElementById("grupo");
+        sGrupo.innerHTML = '<option value="">-- Selecione --</option>';
+        sGrupo.disabled = !linha;
+
+        if(linha) {
+            const grupos = Object.keys(dadosRotas[linha]);
+            grupos.forEach(g => sGrupo.add(new Option(g, g)));
+            if(grupos.length === 1) { sGrupo.value = grupos[0]; liberarBotao(); }
+        }
+    }
+
+    function liberarBotao() {
+        document.getElementById("btnBuscar").disabled = !document.getElementById("grupo").value;
+    }
+
+    function buscarRota() {
+        const linha = document.getElementById("linha").value;
+        const grupo = document.getElementById("grupo").value;
+        const pts = dadosRotas[linha][grupo];
+
+        if (!pts || pts.length < 1) return;
+
+        // Configuração da URL do Maps com múltiplas paradas
+        const origin = encodeURIComponent(pts[0].e);
+        const destination = encodeURIComponent(pts[pts.length - 1].e);
+        
+        let waypoints = "";
+        if (pts.length > 2) {
+            // Pega todos os pontos entre o primeiro e o último
+            const intermediarios = pts.slice(1, -1).map(p => encodeURIComponent(p.e));
+            waypoints = "&waypoints=" + intermediarios.join('|');
+        }
+
+        const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints}&travelmode=driving`;
+
+        let html = `
+            <div class="rota-card">
+                <div class="rota-header">
+                    <span>Linha ${linha}</span>
+                    <a href="${mapsUrl}" target="_blank" class="btn-maps">VER NO MAPA</a>
+                </div>`;
+        
+        pts.forEach(p => {
+            html += `
+                <div class="ponto">
+                    <span class="horario">⏰ ${p.h}</span>
+                    <span class="endereco">📍 ${p.e}</span>
+                </div>`;
+        });
+        
+        document.getElementById("resultado").innerHTML = html + "</div>";
+    }
+</script>
+</body>
+</html>
